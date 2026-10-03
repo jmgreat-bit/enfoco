@@ -39,6 +39,8 @@ jobs:
       - name: Build Application
         working-directory: enfoco-github
         run: npm run build
+        env:
+          CI: false
 
       - name: Upload Artifact
         uses: actions/upload-pages-artifact@v3
