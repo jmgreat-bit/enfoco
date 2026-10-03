@@ -7,7 +7,7 @@ interface LoginProps {
 }
 
 export const Login: React.FC<LoginProps> = ({ onSwitchToSignup, onClose }) => {
-  const { login, state } = useAuth();
+  const { login, loginAsDemo, state } = useAuth();
   const { loading, error } = state;
   const [formData, setFormData] = useState({
     email: '',
@@ -134,7 +134,7 @@ export const Login: React.FC<LoginProps> = ({ onSwitchToSignup, onClose }) => {
           <button
             type="submit"
             disabled={loading}
-            className="w-full px-6 py-3 bg-gradient-to-r from-cyan-400 to-purple-500 text-white rounded-lg font-medium hover:from-cyan-500 hover:to-purple-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+            className="w-full px-6 py-3 bg-gradient-to-r from-cyan-400 to-purple-500 text-white rounded-lg font-medium hover:from-cyan-500 hover:to-purple-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all mb-3"
           >
             {loading ? (
               <div className="flex items-center justify-center space-x-2">
@@ -144,6 +144,18 @@ export const Login: React.FC<LoginProps> = ({ onSwitchToSignup, onClose }) => {
             ) : (
               'Sign In'
             )}
+          </button>
+
+          {/* Demo Button */}
+          <button
+            type="button"
+            onClick={() => {
+              loginAsDemo();
+              onClose();
+            }}
+            className="w-full px-6 py-3 bg-gray-800 border border-cyan-500/40 text-cyan-400 rounded-lg font-medium hover:bg-cyan-500/10 hover:border-cyan-400 transition-all"
+          >
+            🚀 Continue as Guest / Demo Mode
           </button>
 
           {/* Switch to Signup */}

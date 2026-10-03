@@ -102,48 +102,7 @@ function AppContent() {
     }
   }, [user]);
 
-  // Show loading screen while checking authentication
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-black text-white flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-16 h-16 border-4 border-cyan-400 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-300">Loading ENFOCO...</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Show landing page if user is not logged in
-  console.log('App: Current user state:', user);
-  if (!user) {
-    return (
-      <div className="min-h-screen bg-black text-white">
-        <LandingPage
-          onShowLogin={handleShowLogin}
-          onShowSignup={handleShowSignup}
-        />
-        
-        {/* Modals */}
-        {showLogin && (
-          <Login
-            onSwitchToSignup={handleShowSignup}
-            onClose={handleCloseModals}
-          />
-        )}
-        
-        {showSignup && (
-          <Signup
-            onSwitchToLogin={handleShowLogin}
-            onClose={handleCloseModals}
-          />
-        )}
-        
-        {/* Back to Top Button */}
-        <BackToTopButton />
-      </div>
-    );
-  }
+  // Dashboard is open to all visitors - no login gate required
 
   // Show dashboard if user is logged in
   return (

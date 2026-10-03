@@ -1,11 +1,53 @@
 import { supabase, isSupabaseConfigured } from '../config/supabase';
 import { ContentItem, SearchFilters } from '../types';
+import { mockContent } from '../data/mockData';
 
 export class ContentService {
+  // Utility function to get mock items
+  static getMockItems(): ContentItem[] {
+    return mockContent.map((item: any) => ({
+      id: String(item.id),
+      title: item.title || 'Untitled',
+      description: item.snippet || item.description || '',
+      content_type: 'article',
+      category: item.contentCategory || item.category || 'General',
+      country: item.country || 'United States',
+      country_code: this.getCountryCode(item.country || 'United States'),
+      image_url: item.imageUrl || item.image_url || 'https://images.unsplash.com/photo-1486312338219-ce68d2c6f44d?w=400',
+      source_url: item.link || item.source_url || '#',
+      author: item.source || item.author || 'Enfoco Verified',
+      published_at: item.publishDate || item.published_at || new Date().toISOString(),
+      is_verified: item.verified || false,
+      relevance_score: item.relevance_score || 95,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }));
+  }
+
+  private static hfCache: ContentItem[] | null = null;
+
+  // Fetch live articles from Hugging Face dataset
+  static async getHfItems(): Promise<ContentItem[]> {
+    if (this.hfCache && this.hfCache.length > 0) return this.hfCache;
+    try {
+      const res = await fetch('https://huggingface.co/datasets/jmsgrea/enfoco-news/raw/main/latest_news.json');
+      if (res.ok) {
+        const json = await res.json();
+        if (Array.isArray(json) && json.length > 0) {
+          this.hfCache = json.map(item => this.transformScrapedContent(item));
+          return this.hfCache;
+        }
+      }
+    } catch (e) {
+      console.warn('Hugging Face dataset fetch fallback:', e);
+    }
+    return this.getMockItems();
+  }
+
   // Transform scraped_content to match ContentItem interface
   private static transformScrapedContent(item: any): ContentItem {
     return {
-      id: item.id,
+      id: String(item.id || item.link || Math.random()),
       title: item.title || 'Untitled',
       description: item.snippet || 'No description available',
       content_type: item.content_type || 'article',
@@ -51,135 +93,124 @@ export class ContentService {
     return countryMap[countryName] || 'XX';
   }
   static async getContent(filters: SearchFilters = {}, limit: number = 20, offset: number = 0): Promise<ContentItem[]> {
-    if (!isSupabaseConfigured()) {
-      console.error('Supabase not configured');
-      return [];
-    }
-
     try {
-      // First, try to get content from user's country
-      let query = supabase
-        .from('scraped_content')
-        .select('id, title, snippet, link, image_url, source, country, category, verified, content_type, publish_date, created_at, relevance_score, mentioned');
+      if (isSupabaseConfigured()) {
+        let query = supabase
+          .from('scraped_content')
+          .select('id, title, snippet, link, image_url, source, country, category, verified, content_type, publish_date, created_at, relevance_score, mentioned');
 
-      // Apply filters based on actual columns
-      if (filters.country) {
-        query = query.eq('country', filters.country);
+        if (filters.country) {
+          query = query.eq('country', filters.country);
+        }
+
+        if (filters.category) {
+          query = query.eq('category', filters.category);
+        }
+
+        if (filters.is_verified !== undefined) {
+          query = query.eq('verified', filters.is_verified);
+        }
+
+        if (filters.content_type) {
+          query = query.eq('content_type', filters.content_type);
+        }
+
+        query = query.order('relevance_score', { ascending: false, nullsFirst: false })
+                     .order('publish_date', { ascending: false, nullsFirst: false })
+                     .order('created_at', { ascending: false })
+                     .range(offset, offset + limit - 1);
+
+        const { data, error } = await query;
+
+        if (!error && data && data.length > 0) {
+          return data.map(item => ContentService.transformScrapedContent(item));
+        }
       }
 
-      if (filters.category) {
-        query = query.eq('category', filters.category);
-      }
-
-      if (filters.is_verified !== undefined) {
-        query = query.eq('verified', filters.is_verified);
-      }
-
-      if (filters.content_type) {
-        query = query.eq('content_type', filters.content_type);
-      }
-
-      // Order by relevance_score first, then publish_date, then created_at
-      query = query.order('relevance_score', { ascending: false, nullsFirst: false })
-                   .order('publish_date', { ascending: false, nullsFirst: false })
-                   .order('created_at', { ascending: false })
-                   .range(offset, offset + limit - 1);
-
-      const { data, error } = await query;
-
-      if (error) {
-        console.error('Error fetching content:', error);
-        return [];
-      }
-
-      // Return the filtered content (empty array if no results)
-      return (data || []).map(item => ContentService.transformScrapedContent(item));
+      // Fallback to live Hugging Face dataset (or mock)
+      let items = await this.getHfItems();
+      if (filters.country) items = items.filter(i => i.country.toLowerCase() === filters.country!.toLowerCase());
+      if (filters.category) items = items.filter(i => i.category.toLowerCase() === filters.category!.toLowerCase());
+      if (filters.is_verified !== undefined) items = items.filter(i => i.is_verified === filters.is_verified);
+      return items.slice(offset, offset + limit);
     } catch (error) {
-      console.error('Error fetching content:', error);
-      return [];
+      console.warn('Error fetching content, using fallback:', error);
+      return (await this.getHfItems()).slice(offset, offset + limit);
     }
   }
 
   // Get content for Global Stream (country + mentioned filtering)
   static async getGlobalStreamContent(countryName: string, limit: number = 20, offset: number = 0): Promise<ContentItem[]> {
-    if (!isSupabaseConfigured()) {
-      console.error('Supabase not configured');
-      return [];
-    }
-
     try {
-      // Get content from the specified country OR content that mentions the country
-      const { data, error } = await supabase
-        .from('scraped_content')
-        .select('id, title, snippet, link, image_url, source, country, category, verified, content_type, publish_date, created_at, relevance_score, mentioned')
-        .or(`country.eq.${countryName},mentioned.cs.{${countryName}}`)
-        .order('relevance_score', { ascending: false, nullsFirst: false })
-        .order('publish_date', { ascending: false, nullsFirst: false })
-        .order('created_at', { ascending: false })
-        .range(offset, offset + limit - 1);
+      if (isSupabaseConfigured()) {
+        const { data, error } = await supabase
+          .from('scraped_content')
+          .select('id, title, snippet, link, image_url, source, country, category, verified, content_type, publish_date, created_at, relevance_score, mentioned')
+          .or(`country.eq.${countryName},mentioned.cs.{${countryName}}`)
+          .order('relevance_score', { ascending: false, nullsFirst: false })
+          .order('publish_date', { ascending: false, nullsFirst: false })
+          .order('created_at', { ascending: false })
+          .range(offset, offset + limit - 1);
 
-      if (error) {
-        console.error('Error fetching global stream content:', error);
-        return [];
+        if (!error && data && data.length > 0) {
+          return data.map(item => ContentService.transformScrapedContent(item));
+        }
       }
 
-      return (data || []).map(item => ContentService.transformScrapedContent(item));
+      const items = await this.getHfItems();
+      const filtered = items.filter(i => i.country.toLowerCase() === countryName.toLowerCase());
+      return (filtered.length > 0 ? filtered : items).slice(offset, offset + limit);
     } catch (error) {
-      console.error('Error fetching global stream content:', error);
-      return [];
+      console.warn('Error fetching global stream content, using fallback:', error);
+      return (await this.getHfItems()).slice(offset, offset + limit);
     }
   }
 
   // Get unique categories from database
   static async getCategories(): Promise<string[]> {
-    if (!isSupabaseConfigured()) {
-      console.error('Supabase not configured');
-      return [];
-    }
-
     try {
-      const { data, error } = await supabase
-        .from('scraped_content')
-        .select('category')
-        .not('category', 'is', null);
+      if (isSupabaseConfigured()) {
+        const { data, error } = await supabase
+          .from('scraped_content')
+          .select('category')
+          .not('category', 'is', null);
 
-      if (error) {
-        console.error('Error fetching categories:', error);
-        return [];
+        if (!error && data && data.length > 0) {
+          const uniqueCategories = Array.from(new Set(data.map(item => item.category)));
+          return uniqueCategories.sort();
+        }
       }
 
-      // Get unique categories and sort them
-      const uniqueCategories = Array.from(new Set((data || []).map(item => item.category)));
-      return uniqueCategories.sort();
+      const mock = this.getMockItems();
+      const unique = Array.from(new Set(mock.map(i => i.category)));
+      return unique.length > 0 ? unique.sort() : ['Business', 'Technology', 'Politics', 'Health', 'Sports', 'Entertainment'];
     } catch (error) {
-      console.error('Error fetching categories:', error);
-      return [];
+      return ['Business', 'Technology', 'Politics', 'Health', 'Sports', 'Entertainment'];
     }
   }
 
   // Get content for Explore section with country diversity
   static async getExploreContent(limit: number = 50): Promise<{ [category: string]: ContentItem[] }> {
-    if (!isSupabaseConfigured()) {
-      console.error('Supabase not configured');
-      return {};
-    }
-
     try {
-      // Get all content ordered by relevance_score
-      const { data, error } = await supabase
-        .from('scraped_content')
-        .select('id, title, snippet, link, image_url, source, country, category, verified, content_type, publish_date, created_at, relevance_score')
-        .order('relevance_score', { ascending: false, nullsFirst: false })
-        .order('publish_date', { ascending: false, nullsFirst: false })
-        .order('created_at', { ascending: false })
-        .limit(limit * 10); // Get more to ensure we have enough for diversity
+      let transformedContent: ContentItem[] = [];
 
-      if (error) {
-        console.error('Error fetching explore content:', error);
-        return {};
+      if (isSupabaseConfigured()) {
+        const { data, error } = await supabase
+          .from('scraped_content')
+          .select('id, title, snippet, link, image_url, source, country, category, verified, content_type, publish_date, created_at, relevance_score')
+          .order('relevance_score', { ascending: false, nullsFirst: false })
+          .order('publish_date', { ascending: false, nullsFirst: false })
+          .order('created_at', { ascending: false })
+          .limit(limit * 10);
+
+        if (!error && data && data.length > 0) {
+          transformedContent = data.map(item => ContentService.transformScrapedContent(item));
+        }
       }
 
-      const transformedContent = (data || []).map(item => ContentService.transformScrapedContent(item));
+      if (transformedContent.length === 0) {
+        transformedContent = this.getMockItems();
+      }
       
       // Group by category and ensure country diversity
       const categoryContent: { [category: string]: ContentItem[] } = {};
@@ -189,39 +220,28 @@ export class ContentService {
       for (const item of transformedContent) {
         if (usedContentIds.has(item.id)) continue;
         
-        if (!categoryContent[item.category]) {
-          categoryContent[item.category] = [];
+        const cat = item.category || 'General';
+        if (!categoryContent[cat]) {
+          categoryContent[cat] = [];
         }
         
-        if (categoryContent[item.category].length < limit) {
-          categoryContent[item.category].push(item);
+        if (categoryContent[cat].length < limit) {
+          categoryContent[cat].push(item);
           usedContentIds.add(item.id);
-        }
-      }
-
-      // Second pass: fill remaining slots ensuring country diversity
-      for (const category in categoryContent) {
-        const categoryItems = categoryContent[category];
-        const usedCountries = new Set(categoryItems.map(item => item.country));
-        
-        for (const item of transformedContent) {
-          if (usedContentIds.has(item.id)) continue;
-          if (item.category !== category) continue;
-          if (categoryItems.length >= limit) break;
-          
-          // Only add if it's from a different country
-          if (!usedCountries.has(item.country)) {
-            categoryItems.push(item);
-            usedContentIds.add(item.id);
-            usedCountries.add(item.country);
-          }
         }
       }
 
       return categoryContent;
     } catch (error) {
-      console.error('Error fetching explore content:', error);
-      return {};
+      console.warn('Error fetching explore content, using mock:', error);
+      const mock = this.getMockItems();
+      const categoryContent: { [category: string]: ContentItem[] } = {};
+      mock.forEach(item => {
+        const cat = item.category || 'General';
+        if (!categoryContent[cat]) categoryContent[cat] = [];
+        categoryContent[cat].push(item);
+      });
+      return categoryContent;
     }
   }
 

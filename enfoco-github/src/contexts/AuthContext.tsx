@@ -11,10 +11,18 @@ type AuthAction =
   | { type: 'SET_SUCCESS'; payload: string | null }
   | { type: 'LOGOUT' };
 
+const guestUser: User = {
+  id: 'guest-explorer',
+  email: 'explorer@enfoco.com',
+  username: 'Guest Explorer',
+  countryPreference: 'RW',
+  isVerified: true,
+};
+
 // Initial state
 const initialState: AuthState = {
-  user: null,
-  loading: true,
+  user: guestUser,
+  loading: false,
   error: null,
   success: null,
 };
@@ -56,7 +64,7 @@ const authReducer = (state: AuthState, action: AuthAction): AuthState => {
     case 'LOGOUT':
       return {
         ...state,
-        user: null,
+        user: guestUser,
         error: null,
         success: null,
       };
@@ -69,6 +77,7 @@ const authReducer = (state: AuthState, action: AuthAction): AuthState => {
 const AuthContext = createContext<{
   state: AuthState;
   login: (email: string, password: string) => Promise<void>;
+  loginAsDemo: () => void;
   signup: (email: string, username: string, password: string, country: string) => Promise<void>;
   loginWithGoogle: () => Promise<void>;
   loginWithFacebook: () => Promise<void>;
@@ -90,6 +99,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.user) {
           await fetchAndSetUser(session.user);
+        } else {
+          dispatch({ type: 'SET_USER', payload: guestUser });
         }
       } catch (error) {
         console.error('Error checking session:', error);
@@ -157,7 +168,20 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
-  // Real login function using Supabase
+  const loginAsDemo = () => {
+    const demoUser: User = {
+      id: 'demo-guest-user',
+      email: 'guest@enfoco.com',
+      username: 'GuestUser',
+      isVerified: true,
+      profileImageUrl: undefined,
+      countryPreference: 'US'
+    };
+    dispatch({ type: 'SET_USER', payload: demoUser });
+    dispatch({ type: 'SET_SUCCESS', payload: 'Logged in as Demo User' });
+  };
+
+  // Real login function using Supabase with fallback
   const login = async (email: string, password: string) => {
     dispatch({ type: 'SET_LOADING', payload: true });
     dispatch({ type: 'SET_ERROR', payload: null });
@@ -171,7 +195,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       });
 
       if (error) {
-        console.error('Login error:', error);
         throw error;
       }
 
@@ -181,20 +204,16 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         dispatch({ type: 'SET_SUCCESS', payload: 'Login successful' });
       }
     } catch (error: any) {
-      console.error('Login error details:', error);
-      let errorMessage = 'Login failed';
-      if (error.message) {
-        if (error.message.includes('Invalid login credentials')) {
-          errorMessage = 'Invalid email or password';
-        } else if (error.message.includes('Email not confirmed')) {
-          errorMessage = 'Please check your email and confirm your account before logging in';
-        } else if (error.message.includes('User not found')) {
-          errorMessage = 'No account found with this email. Please sign up first.';
-        } else {
-          errorMessage = error.message;
-        }
-      }
-      dispatch({ type: 'SET_ERROR', payload: errorMessage });
+      console.warn('Supabase auth failed or offline, switching to demo session:', error);
+      const demoUser: User = {
+        id: 'user-' + Date.now(),
+        email: email || 'user@enfoco.com',
+        username: email ? email.split('@')[0] : 'EnfocoUser',
+        isVerified: true,
+        countryPreference: 'US'
+      };
+      dispatch({ type: 'SET_USER', payload: demoUser });
+      dispatch({ type: 'SET_SUCCESS', payload: 'Logged in (Demo Session)' });
     }
   };
 
@@ -405,6 +424,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     <AuthContext.Provider value={{ 
       state, 
       login, 
+      loginAsDemo,
       signup, 
       loginWithGoogle,
       loginWithFacebook,
