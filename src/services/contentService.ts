@@ -25,23 +25,57 @@ export class ContentService {
   }
 
   private static hfCache: ContentItem[] | null = null;
+  private static pendingPromise: Promise<ContentItem[]> | null = null;
 
-  // Fetch live articles from Hugging Face dataset
+  // Fetch live articles from Hugging Face dataset with instant cache & fast timeout
   static async getHfItems(): Promise<ContentItem[]> {
     if (this.hfCache && this.hfCache.length > 0) return this.hfCache;
+
+    // Check sessionStorage for instant reload
     try {
-      const res = await fetch('https://huggingface.co/datasets/jmsgrea/enfoco-news/raw/main/latest_news.json');
-      if (res.ok) {
-        const json = await res.json();
-        if (Array.isArray(json) && json.length > 0) {
-          this.hfCache = json.map(item => this.transformScrapedContent(item));
+      const stored = sessionStorage.getItem('enfoco_live_articles');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          this.hfCache = parsed;
           return this.hfCache;
         }
       }
     } catch (e) {
-      console.warn('Hugging Face dataset fetch fallback:', e);
+      // ignore
     }
-    return this.getMockItems();
+
+    if (this.pendingPromise) return this.pendingPromise;
+
+    this.pendingPromise = (async () => {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 4000); // 4-second max timeout
+
+        const res = await fetch('https://huggingface.co/datasets/jmsgrea/enfoco-news/raw/main/latest_news.json', {
+          signal: controller.signal
+        });
+        clearTimeout(timeout);
+
+        if (res.ok) {
+          const json = await res.json();
+          if (Array.isArray(json) && json.length > 0) {
+            this.hfCache = json.map(item => this.transformScrapedContent(item));
+            try {
+              sessionStorage.setItem('enfoco_live_articles', JSON.stringify(this.hfCache.slice(0, 200)));
+            } catch (e) {}
+            return this.hfCache;
+          }
+        }
+      } catch (e) {
+        console.warn('Live fetch timed out or offline, displaying instant local data');
+      }
+      return this.getMockItems();
+    })();
+
+    const result = await this.pendingPromise;
+    this.pendingPromise = null;
+    return result;
   }
 
   // Transform scraped_content to match ContentItem interface
