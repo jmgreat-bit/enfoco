@@ -287,172 +287,145 @@ export class ContentService {
     try {
       const { data, error } = await supabase
         .from('saved_content')
-        .select(`
-          *,
-          content:content_id (*)
-        `)
-        .eq('user_id', userId)
-        .order('saved_at', { ascending: false });
+  private static SAVED_KEY = 'enfoco_saved_briefings';
 
-      if (error) {
-        console.error('Error fetching saved content:', error);
-        return [];
+  static getSavedContentSync(): ContentItem[] {
+    try {
+      const data = localStorage.getItem(this.SAVED_KEY);
+      if (data) {
+        const parsed = JSON.parse(data);
+        if (Array.isArray(parsed)) return parsed;
       }
-
-      return data?.map(item => {
-        if (item.content) {
-          return { ...item.content, is_saved: true };
-        }
-        return null;
-      }).filter(Boolean) || [];
-    } catch (error) {
-      console.error('Error fetching saved content:', error);
-      return [];
+    } catch (e) {
+      // ignore
     }
+    return [];
+  }
+
+  static async getSavedContent(userId?: string): Promise<ContentItem[]> {
+    const localSaved = this.getSavedContentSync();
+    if (isSupabaseConfigured() && userId) {
+      try {
+        const { data, error } = await supabase
+          .from('saved_content')
+          .select('*, content:content_id (*)')
+          .eq('user_id', userId)
+          .order('saved_at', { ascending: false });
+
+        if (!error && data && data.length > 0) {
+          const remote = data
+            .map(item => item.content ? { ...ContentService.transformScrapedContent(item.content), is_saved: true } : null)
+            .filter(Boolean) as ContentItem[];
+
+          const map = new Map<string, ContentItem>();
+          remote.forEach(r => map.set(r.id, r));
+          localSaved.forEach(l => map.set(l.id, l));
+          return Array.from(map.values());
+        }
+      } catch (error) {
+        console.error('Error fetching saved content from Supabase:', error);
+      }
+    }
+    return localSaved;
   }
 
   static async isContentSaved(userId: string, contentId: string): Promise<boolean> {
-    if (!isSupabaseConfigured()) {
-      return false;
-    }
-
-    try {
-      const { data, error } = await supabase
-        .from('saved_content')
-        .select('id')
-        .eq('user_id', userId)
-        .eq('content_id', contentId)
-        .single();
-
-      if (error && error.code !== 'PGRST116') {
-        console.error('Error checking saved content:', error);
-        return false;
-      }
-
-      return !!data;
-    } catch (error) {
-      console.error('Error checking saved content:', error);
-      return false;
-    }
+    const local = this.getSavedContentSync();
+    return local.some(item => item.id === contentId || item.source_url === contentId);
   }
 
-  // Search content for Global Stream (country + mentioned filtering)
-  static async searchGlobalStreamContent(query: string, countryName: string, limit: number = 20, offset: number = 0): Promise<ContentItem[]> {
-    if (!isSupabaseConfigured()) {
-      console.error('Supabase not configured');
-      return [];
-    }
-
-    console.log('Searching Global Stream for:', query, 'in country:', countryName);
-
+  static async saveContent(userId: string, contentId: string, notes?: string, fullItem?: ContentItem): Promise<{ error: any }> {
     try {
-      const { data, error } = await supabase
-        .from('scraped_content')
-        .select('id, title, snippet, link, image_url, source, country, category, verified, content_type, publish_date, created_at, relevance_score, mentioned')
-        .or(`title.ilike.%${query}%,snippet.ilike.%${query}%`)
-        .or(`country.eq.${countryName},mentioned.cs.{${countryName}}`)
-        .order('relevance_score', { ascending: false, nullsFirst: false })
-        .order('publish_date', { ascending: false, nullsFirst: false })
-        .order('created_at', { ascending: false })
-        .range(offset, offset + limit - 1);
-
-      if (error) {
-        console.error('Error searching global stream content:', error);
-        return [];
+      const saved = this.getSavedContentSync();
+      if (!saved.some(item => item.id === contentId)) {
+        let itemToSave = fullItem;
+        if (!itemToSave && this.hfCache) {
+          itemToSave = this.hfCache.find(c => c.id === contentId);
+        }
+        if (itemToSave) {
+          saved.unshift({ ...itemToSave, is_saved: true });
+          try {
+            localStorage.setItem(this.SAVED_KEY, JSON.stringify(saved));
+          } catch (e) {
+            console.warn('LocalStorage save limit reached:', e);
+          }
+        }
       }
 
-      return (data || []).map(item => ContentService.transformScrapedContent(item));
-    } catch (error) {
-      console.error('Error searching global stream content:', error);
-      return [];
-    }
-  }
+      if (isSupabaseConfigured()) {
+        await supabase
+          .from('saved_content')
+          .insert([{ user_id: userId, content_id: contentId, notes, saved_at: new Date().toISOString() }]);
+      }
 
-  static async saveContent(userId: string, contentId: string, notes?: string): Promise<{ error: any }> {
-    if (!isSupabaseConfigured()) {
       return { error: null };
-    }
-
-    try {
-      // First check if content is already saved
-      const { data: existing, error: checkError } = await supabase
-        .from('saved_content')
-        .select('id')
-        .eq('user_id', userId)
-        .eq('content_id', contentId)
-        .single();
-
-      if (checkError && checkError.code !== 'PGRST116') { // PGRST116 = no rows returned
-        return { error: checkError };
-      }
-
-      if (existing) {
-        // Content is already saved, return success
-        return { error: null };
-      }
-
-      // Insert new saved content
-      const { error } = await supabase
-        .from('saved_content')
-        .insert([
-          {
-            user_id: userId,
-            content_id: contentId,
-            notes,
-            saved_at: new Date().toISOString(),
-          },
-        ]);
-
-      return { error };
     } catch (error) {
       return { error };
     }
   }
 
   static async unsaveContent(userId: string, contentId: string): Promise<{ error: any }> {
-    if (!isSupabaseConfigured()) {
-      return { error: null };
-    }
-
     try {
-      const { error } = await supabase
-        .from('saved_content')
-        .delete()
-        .eq('user_id', userId)
-        .eq('content_id', contentId);
+      let saved = this.getSavedContentSync();
+      saved = saved.filter(item => item.id !== contentId && item.source_url !== contentId);
+      try {
+        localStorage.setItem(this.SAVED_KEY, JSON.stringify(saved));
+      } catch (e) {}
 
-      return { error };
+      if (isSupabaseConfigured()) {
+        await supabase
+          .from('saved_content')
+          .delete()
+          .eq('user_id', userId)
+          .eq('content_id', contentId);
+      }
+
+      return { error: null };
     } catch (error) {
       return { error };
     }
   }
 
+  // Search content across live dataset
   static async searchContent(query: string, filters: SearchFilters = {}, limit: number = 20, offset: number = 0): Promise<ContentItem[]> {
-    if (!isSupabaseConfigured()) {
-      console.error('Supabase not configured');
-      return [];
-    }
+    const q = query.toLowerCase().trim();
+    const items = await this.getHfItems();
+    const filtered = items.filter(item => {
+      const matchQuery = !q ||
+        item.title.toLowerCase().includes(q) ||
+        item.description.toLowerCase().includes(q) ||
+        item.country.toLowerCase().includes(q) ||
+        item.category.toLowerCase().includes(q);
 
-    console.log('Searching for:', query, 'with filters:', filters);
+      const matchCountry = !filters.country || item.country.toLowerCase() === filters.country.toLowerCase();
+      const matchCategory = !filters.category || item.category.toLowerCase() === filters.category.toLowerCase();
+      const matchVerified = filters.is_verified === undefined || item.is_verified === filters.is_verified;
 
-    try {
-      let searchQuery = supabase
-        .from('scraped_content')
-        .select('id, title, snippet, link, image_url, source, country, category, verified, content_type, publish_date, created_at, relevance_score, mentioned')
-        .or(`title.ilike.%${query}%,snippet.ilike.%${query}%`)
-        .order('relevance_score', { ascending: false, nullsFirst: false })
-        .order('publish_date', { ascending: false, nullsFirst: false })
-        .order('created_at', { ascending: false })
-        .range(offset, offset + limit - 1);
+      return matchQuery && matchCountry && matchCategory && matchVerified;
+    });
 
-      // Apply filters
-      if (filters.country) {
-        searchQuery = searchQuery.eq('country', filters.country);
-      }
+    return filtered.slice(offset, offset + limit);
+  }
 
-      if (filters.category) {
-        searchQuery = searchQuery.eq('category', filters.category);
-      }
+  // Search content for Global Stream (country + mentioned filtering)
+  static async searchGlobalStreamContent(query: string, countryName: string, limit: number = 20, offset: number = 0): Promise<ContentItem[]> {
+    const q = query.toLowerCase().trim();
+    const items = await this.getHfItems();
+    const cName = countryName.toLowerCase();
+
+    const filtered = items.filter(item => {
+      const matchQuery = !q ||
+        item.title.toLowerCase().includes(q) ||
+        item.description.toLowerCase().includes(q);
+
+      const matchCountry = item.country.toLowerCase() === cName ||
+        item.description.toLowerCase().includes(cName);
+
+      return matchQuery && matchCountry;
+    });
+
+    return filtered.slice(offset, offset + limit);
+  }
 
       if (filters.is_verified !== undefined) {
         searchQuery = searchQuery.eq('verified', filters.is_verified);

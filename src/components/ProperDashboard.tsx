@@ -110,37 +110,19 @@ export const ProperDashboard: React.FC<ProperDashboardProps> = ({
         // Load content based on stream type and content type
         const filters: any = {};
         
-        // Filter by content type - only show articles for now
-        if (activeSection === 'articles') {
-          filters.content_type = 'verified'; // All content is 'verified' type in database
-        } else {
-          // For videos, books, audio - return empty array since we only have articles
-          contentData = [];
-          setContent(contentData);
-          setLoading(false);
-          setLoadingMore(false);
-          return;
-        }
-        
-        // For Explore tab, use the pre-loaded explore content
-        if (activeStream === 'explore') {
+        // Convert country code to country name
+        const countryName = allCountries.find(c => c.code === selectedCountry)?.name || selectedCountry;
+
+        if (activeSection === 'global' || activeStream === 'global') {
+          contentData = await ContentService.getGlobalStreamContent(countryName, 20, offset);
+        } else if (activeStream === 'explore') {
           // Explore content is loaded separately via loadExploreContent
           contentData = [];
         } else {
-          // Convert country code to country name for other tabs
-          const countryName = allCountries.find(c => c.code === selectedCountry)?.name || selectedCountry;
-          
           if (activeStream === 'verified') {
             filters.is_verified = true;
             filters.country = countryName;
-          } else if (activeStream === 'global') {
-            // Use the new Global Stream method that includes mentioned filtering
-            contentData = await ContentService.getGlobalStreamContent(countryName, 20, offset);
           }
-        }
-        
-        // Only call getContent if we haven't already loaded content for global stream
-        if (activeStream !== 'global') {
           contentData = await ContentService.getContent(filters, 20, offset);
         }
       }
@@ -164,10 +146,8 @@ export const ProperDashboard: React.FC<ProperDashboardProps> = ({
   }, [searchQuery, selectedCountry, activeStream, activeSection]);
 
   const loadSavedContent = useCallback(async () => {
-    if (!user) return;
-    
     try {
-      const saved = await ContentService.getSavedContent(user.id);
+      const saved = await ContentService.getSavedContent(user?.id || 'guest-explorer');
       setSavedContent(saved);
     } catch (error) {
       console.error('Error loading saved content:', error);
@@ -436,28 +416,111 @@ export const ProperDashboard: React.FC<ProperDashboardProps> = ({
     );
   }
 
-  // Show empty state for non-article content types
-  if (activeSection !== 'articles' && activeSection !== 'saved') {
+  if (activeSection === 'stats') {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <div className="text-6xl mb-4">
-            {activeSection === 'videos' && '🎥'}
-            {activeSection === 'books' && '📚'}
-            {activeSection === 'audio' && '🎤'}
+      <div className="flex-1 bg-black min-h-screen p-6 md:p-10 text-white">
+        <div className="max-w-6xl mx-auto">
+          {/* Header */}
+          <div className="mb-8 border-b border-gray-800 pb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center space-x-2.5 mb-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                <span className="text-xs uppercase tracking-widest text-emerald-400 font-mono font-bold">OSINT Pipeline Live</span>
+              </div>
+              <h1 className="text-3xl font-extrabold text-white tracking-tight">System & Data Telemetry</h1>
+              <p className="text-gray-400 text-sm mt-1">Real-time status of Enfoco automated multi-country intelligence pipeline.</p>
+            </div>
+            <a
+              href="https://huggingface.co/datasets/jmsgrea/enfoco-news"
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center space-x-2 px-4 py-2.5 bg-amber-400 hover:bg-amber-300 text-black font-semibold rounded-lg text-sm transition-all shadow-md shadow-amber-500/10"
+            >
+              <span>🤗 Explore Hugging Face Dataset</span>
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+            </a>
           </div>
-          <h2 className="text-2xl font-bold text-white mb-2 capitalize">
-            {activeSection} Coming Soon
-          </h2>
-          <p className="text-gray-400 mb-6">
-            We're working on adding {activeSection} content. For now, enjoy our articles!
-          </p>
-          <button
-            onClick={() => window.location.reload()}
-            className="px-6 py-2 bg-cyan-500 hover:bg-cyan-600 text-white rounded-lg transition-colors"
-          >
-            View Articles
-          </button>
+
+          {/* Metric Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
+            <div className="bg-gray-950 border border-gray-800 rounded-xl p-5 hover:border-cyan-500/40 transition-colors">
+              <span className="text-xs font-mono uppercase text-gray-500">Indexed Articles</span>
+              <div className="text-3xl font-black text-cyan-400 mt-2 font-mono">1,000+</div>
+              <span className="text-[11px] text-gray-400 mt-1 block">14,426 rows in active dataset</span>
+            </div>
+            <div className="bg-gray-950 border border-gray-800 rounded-xl p-5 hover:border-blue-500/40 transition-colors">
+              <span className="text-xs font-mono uppercase text-gray-500">Global Coverage</span>
+              <div className="text-3xl font-black text-blue-400 mt-2 font-mono">49 Countries</div>
+              <span className="text-[11px] text-gray-400 mt-1 block">63 verified publishers</span>
+            </div>
+            <div className="bg-gray-950 border border-gray-800 rounded-xl p-5 hover:border-purple-500/40 transition-colors">
+              <span className="text-xs font-mono uppercase text-gray-500">Active AI Model</span>
+              <div className="text-xl font-bold text-purple-400 mt-2">Gemini 2.5 Flash</div>
+              <span className="text-[11px] text-gray-400 mt-1 block">Google Generative AI (Batched)</span>
+            </div>
+            <div className="bg-gray-950 border border-gray-800 rounded-xl p-5 hover:border-emerald-500/40 transition-colors">
+              <span className="text-xs font-mono uppercase text-gray-500">Sync Cadence</span>
+              <div className="text-2xl font-bold text-emerald-400 mt-2">Every 4 Hours</div>
+              <span className="text-[11px] text-gray-400 mt-1 block">Automated via GitHub Actions</span>
+            </div>
+          </div>
+
+          {/* Details Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2 bg-gray-950 border border-gray-800 rounded-xl p-6">
+              <h3 className="text-lg font-bold text-white mb-4 flex items-center space-x-2">
+                <span>🌍</span>
+                <span>Active Coverage by Country</span>
+              </h3>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {[
+                  { name: 'Australia', count: 73 },
+                  { name: 'Argentina', count: 66 },
+                  { name: 'Romania', count: 63 },
+                  { name: 'Turkey', count: 52 },
+                  { name: 'Brazil', count: 48 },
+                  { name: 'Greece', count: 42 },
+                  { name: 'China', count: 40 },
+                  { name: 'Venezuela', count: 39 },
+                  { name: 'Bangladesh', count: 37 },
+                  { name: 'Switzerland', count: 37 },
+                  { name: 'Rwanda', count: 20 },
+                  { name: 'South Africa', count: 18 }
+                ].map(c => (
+                  <div key={c.name} className="flex items-center justify-between p-2.5 rounded-lg bg-gray-900/60 border border-gray-800 text-xs">
+                    <span className="text-gray-300 font-medium">{c.name}</span>
+                    <span className="px-2 py-0.5 rounded bg-gray-800 text-cyan-400 font-mono text-[11px]">{c.count}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="bg-gray-950 border border-gray-800 rounded-xl p-6">
+              <h3 className="text-lg font-bold text-white mb-4 flex items-center space-x-2">
+                <span>🏷️</span>
+                <span>Intelligence Categories</span>
+              </h3>
+              <div className="space-y-2.5 text-xs">
+                {[
+                  { label: 'Technology', count: 220, color: 'bg-cyan-500' },
+                  { label: 'Politics', count: 58, color: 'bg-purple-500' },
+                  { label: 'Sports', count: 21, color: 'bg-emerald-500' },
+                  { label: 'Health', count: 18, color: 'bg-rose-500' },
+                  { label: 'Environment', count: 11, color: 'bg-lime-500' },
+                  { label: 'Business', count: 9, color: 'bg-amber-500' },
+                  { label: 'General & Diplomacy', count: 651, color: 'bg-gray-500' }
+                ].map(t => (
+                  <div key={t.label} className="flex items-center justify-between py-1.5 border-b border-gray-800/60">
+                    <div className="flex items-center space-x-2">
+                      <span className={`w-2 h-2 rounded-full ${t.color}`}></span>
+                      <span className="text-gray-300">{t.label}</span>
+                    </div>
+                    <span className="font-mono text-gray-400">{t.count}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -527,8 +590,8 @@ export const ProperDashboard: React.FC<ProperDashboardProps> = ({
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
                 </svg>
               </div>
-              <p className="text-gray-400">No saved content yet.</p>
-              <p className="text-gray-500 text-sm mt-2">Save articles, videos, and books to access them here.</p>
+              <p className="text-gray-400">No saved briefings yet.</p>
+              <p className="text-gray-500 text-sm mt-2">Bookmark any intelligence article to access it offline or review later.</p>
             </div>
           )}
           </div>

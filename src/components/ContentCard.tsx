@@ -54,10 +54,7 @@ export const ContentCard: React.FC<ContentCardProps> = ({
   }, []);
 
   const handleSave = async () => {
-    if (!user) {
-      setSaveError('Please log in to save content');
-      return;
-    }
+    const userId = user?.id || 'guest-explorer';
 
     setIsSaving(true);
     setSaveError(null);
@@ -72,7 +69,7 @@ export const ContentCard: React.FC<ContentCardProps> = ({
         console.log('Content unsaved successfully');
         onSave?.(content.id, false);
       } else {
-        const { error } = await ContentService.saveContent(user.id, content.id);
+        const { error } = await ContentService.saveContent(user.id, content.id, undefined, content);
         if (error) {
           throw new Error('Failed to save content');
         }
@@ -163,22 +160,15 @@ export const ContentCard: React.FC<ContentCardProps> = ({
     }
   };
 
-  const getContentTypeIcon = () => {
-    switch (content.content_type) {
-      case 'video': return '🎥';
-      case 'book': return '📚';
-      case 'talk': return '🎤';
-      default: return '📄';
-    }
-  };
-
-  const getContentTypeColor = () => {
-    switch (content.content_type) {
-      case 'video': return 'from-red-500 to-pink-500';
-      case 'book': return 'from-green-500 to-emerald-500';
-      case 'talk': return 'from-blue-500 to-cyan-500';
-      default: return 'from-purple-500 to-indigo-500';
-    }
+  const getCategoryBadgeStyle = () => {
+    const cat = (content.category || '').toLowerCase();
+    if (cat.includes('tech') || cat.includes('ai') || cat.includes('digital')) return 'bg-cyan-400 text-black border-cyan-300';
+    if (cat.includes('politic') || cat.includes('diploma') || cat.includes('gov')) return 'bg-purple-500 text-white border-purple-400';
+    if (cat.includes('busin') || cat.includes('econ') || cat.includes('financ')) return 'bg-emerald-400 text-black border-emerald-300';
+    if (cat.includes('health') || cat.includes('med')) return 'bg-rose-500 text-white border-rose-400';
+    if (cat.includes('sport')) return 'bg-amber-400 text-black border-amber-300';
+    if (cat.includes('environ') || cat.includes('climat')) return 'bg-teal-400 text-black border-teal-300';
+    return 'bg-blue-500 text-white border-blue-400';
   };
 
   const formatDate = (dateString: string) => {
@@ -203,11 +193,10 @@ export const ContentCard: React.FC<ContentCardProps> = ({
           }}
         />
         
-        {/* Content Type Badge */}
+        {/* Category Pill Badge */}
         <div className="absolute top-3 left-3">
-          <div className={`flex items-center space-x-1 px-2 py-1 bg-gradient-to-r ${getContentTypeColor()} rounded-full text-white text-xs font-medium`}>
-            <span>{getContentTypeIcon()}</span>
-            <span className="capitalize">{content.content_type}</span>
+          <div className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider shadow-md border backdrop-blur-md ${getCategoryBadgeStyle()}`}>
+            {content.category || 'General'}
           </div>
         </div>
 
@@ -259,9 +248,9 @@ export const ContentCard: React.FC<ContentCardProps> = ({
             disabled={isSaving}
             className={`w-8 h-8 rounded-full flex items-center justify-center text-white transition-colors ${
               isSaved 
-                ? 'bg-purple-500 hover:bg-purple-600' 
-                : 'bg-black/70 hover:bg-purple-500'
-            } ${!user ? 'opacity-50 cursor-not-allowed' : ''}`}
+                ? 'bg-amber-500 hover:bg-amber-600 shadow-md shadow-amber-500/30' 
+                : 'bg-black/70 hover:bg-amber-500'
+            }`}
             title={isSaved ? 'Unsave' : 'Save'}
           >
             {isSaving ? (
@@ -314,26 +303,31 @@ export const ContentCard: React.FC<ContentCardProps> = ({
         {/* Meta Information */}
         <div className="flex items-center justify-between text-xs text-gray-500">
           <div className="flex items-center space-x-2">
-            <span className="flex items-center space-x-1">
+            <span className="flex items-center space-x-1.5 font-medium text-gray-300">
+              <span>{allCountries.find(c => c.code === content.country_code)?.flag || '🌐'}</span>
               <span>{content.country}</span>
-              <span>{allCountries.find(c => c.code === content.country_code)?.flag}</span>
             </span>
-            <span>•</span>
-            <span>{content.category}</span>
           </div>
           <span>{formatDate(content.published_at)}</span>
         </div>
 
-        {/* Author */}
-        <div className="mt-3 pt-3 border-t border-gray-800">
+        {/* Source / Publisher & Action Link */}
+        <div className="mt-3 pt-3 border-t border-gray-800 flex items-center justify-between">
           <div className="flex items-center space-x-2">
-            <div className="w-6 h-6 bg-gradient-to-r from-cyan-400 to-purple-500 rounded-full flex items-center justify-center">
-              <span className="text-xs font-bold text-white">
-                {content.author?.charAt(0)?.toUpperCase() || '?'}
+            <div className="w-5 h-5 bg-gradient-to-r from-cyan-400 to-blue-500 rounded-full flex items-center justify-center">
+              <span className="text-[10px] font-bold text-black">
+                {content.author?.charAt(0)?.toUpperCase() || 'E'}
               </span>
             </div>
-            <span className="text-sm text-gray-400">{content.author || 'Unknown Author'}</span>
+            <span className="text-xs text-gray-400 font-medium truncate max-w-[130px]" title={content.author}>{content.author || 'Enfoco Wire'}</span>
           </div>
+          <button 
+            onClick={handleOpen}
+            className="text-[11px] font-mono font-medium text-cyan-400 hover:text-cyan-300 transition-colors flex items-center space-x-1"
+          >
+            <span>Read source</span>
+            <span>↗</span>
+          </button>
         </div>
 
         {/* Error Message */}

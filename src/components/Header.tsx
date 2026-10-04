@@ -64,7 +64,7 @@ export const Header: React.FC<HeaderProps> = ({
             <div className="relative">
               <input
                 type="text"
-                placeholder="Search articles, videos, books..."
+                placeholder="Search global intelligence, topics, countries..."
                 value={searchQuery}
                 onChange={(e) => onSearch(e.target.value)}
                 className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent"
