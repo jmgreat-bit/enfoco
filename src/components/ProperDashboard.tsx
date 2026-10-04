@@ -41,6 +41,21 @@ export const ProperDashboard: React.FC<ProperDashboardProps> = ({
     statusMessage: 'Category Browsing Available'
   });
   const currentOffsetRef = useRef(0);
+  const [datasetSummary, setDatasetSummary] = useState<{
+    totalArticles: number;
+    totalCountries: number;
+    totalPublishers: number;
+    countryCount: Record<string, number>;
+    categoriesCount: Record<string, number>;
+  } | null>(null);
+
+  useEffect(() => {
+    if (activeSection === 'stats') {
+      ContentService.getDatasetSummary().then(summary => {
+        setDatasetSummary(summary);
+      });
+    }
+  }, [activeSection]);
 
   // Notify parent component when activeStream changes
   useEffect(() => {
@@ -445,13 +460,19 @@ export const ProperDashboard: React.FC<ProperDashboardProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
             <div className="bg-gray-950 border border-gray-800 rounded-xl p-5 hover:border-cyan-500/40 transition-colors">
               <span className="text-xs font-mono uppercase text-gray-500">Indexed Articles</span>
-              <div className="text-3xl font-black text-cyan-400 mt-2 font-mono">1,000+</div>
-              <span className="text-[11px] text-gray-400 mt-1 block">14,426 rows in active dataset</span>
+              <div className="text-3xl font-black text-cyan-400 mt-2 font-mono">
+                {datasetSummary ? datasetSummary.totalArticles.toLocaleString() : '1,000+'}
+              </div>
+              <span className="text-[11px] text-gray-400 mt-1 block">Live cumulative OSINT intelligence</span>
             </div>
             <div className="bg-gray-950 border border-gray-800 rounded-xl p-5 hover:border-blue-500/40 transition-colors">
               <span className="text-xs font-mono uppercase text-gray-500">Global Coverage</span>
-              <div className="text-3xl font-black text-blue-400 mt-2 font-mono">49 Countries</div>
-              <span className="text-[11px] text-gray-400 mt-1 block">63 verified publishers</span>
+              <div className="text-3xl font-black text-blue-400 mt-2 font-mono">
+                {datasetSummary ? datasetSummary.totalCountries : 49} Countries
+              </div>
+              <span className="text-[11px] text-gray-400 mt-1 block">
+                {datasetSummary ? datasetSummary.totalPublishers : 63} verified publishers
+              </span>
             </div>
             <div className="bg-gray-950 border border-gray-800 rounded-xl p-5 hover:border-purple-500/40 transition-colors">
               <span className="text-xs font-mono uppercase text-gray-500">Active AI Model</span>
@@ -460,8 +481,8 @@ export const ProperDashboard: React.FC<ProperDashboardProps> = ({
             </div>
             <div className="bg-gray-950 border border-gray-800 rounded-xl p-5 hover:border-emerald-500/40 transition-colors">
               <span className="text-xs font-mono uppercase text-gray-500">Sync Cadence</span>
-              <div className="text-2xl font-bold text-emerald-400 mt-2">Every 4 Hours</div>
-              <span className="text-[11px] text-gray-400 mt-1 block">Automated via GitHub Actions</span>
+              <div className="text-2xl font-bold text-emerald-400 mt-2">Every 3 Hours</div>
+              <span className="text-[11px] text-gray-400 mt-1 block">24/7 Automated Pipeline</span>
             </div>
           </div>
 
