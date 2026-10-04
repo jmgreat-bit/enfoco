@@ -1,12 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-import { LandingPage } from './components/LandingPage';
 import { Sidebar } from './components/Sidebar';
 import { DashboardHeader } from './components/DashboardHeader';
 import { ProperDashboard } from './components/ProperDashboard';
-import { Login } from './components/Login';
-import { Signup } from './components/Signup';
 import { ProfileSettings } from './components/ProfileSettings';
 import { DashboardFooter } from './components/DashboardFooter';
 import { BackToTopButton } from './components/BackToTopButton';
@@ -14,21 +11,17 @@ import { ReviewModal } from './components/ReviewModal';
 import { ReviewService } from './services/reviewService';
 
 function AppContent() {
-  console.log('AppContent: Component rendering...');
-  const { state, updateProfile, logout } = useAuth();
-  const { user, loading } = state;
-  console.log('AppContent: Auth state:', { user, loading });
+  const { state, logout } = useAuth();
+  const { user } = state;
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCountry, setSelectedCountry] = useState(user?.countryPreference || 'US');
   const [activeSection, setActiveSection] = useState('articles');
   const [activeStream, setActiveStream] = useState<'explore' | 'verified' | 'global'>('explore');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-  const [showLogin, setShowLogin] = useState(false);
-  const [showSignup, setShowSignup] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const [showReviewModal, setShowReviewModal] = useState(false);
 
-  // Update selectedCountry when user data changes (e.g., when they log in)
+  // Update selectedCountry when user data changes
   useEffect(() => {
     if (user?.countryPreference) {
       setSelectedCountry(user.countryPreference);
@@ -41,17 +34,6 @@ function AppContent() {
 
   const handleCountryChange = (country: string) => {
     setSelectedCountry(country);
-    // Note: Dashboard country selection is temporary and not saved to user profile
-  };
-
-  const handleShowLogin = () => {
-    setShowLogin(true);
-    setShowSignup(false);
-  };
-
-  const handleShowSignup = () => {
-    setShowSignup(true);
-    setShowLogin(false);
   };
 
   const handleShowProfile = () => {
@@ -59,8 +41,6 @@ function AppContent() {
   };
 
   const handleCloseModals = () => {
-    setShowLogin(false);
-    setShowSignup(false);
     setShowProfile(false);
   };
 
