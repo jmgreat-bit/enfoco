@@ -50,9 +50,9 @@ export class ContentService {
     this.pendingPromise = (async () => {
       try {
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 4000); // 4-second max timeout
+        const timeout = setTimeout(() => controller.abort(), 8000); // 8-second max timeout
 
-        const res = await fetch('https://huggingface.co/datasets/jmsgrea/enfoco-news/raw/main/latest_news.json', {
+        const res = await fetch('https://huggingface.co/datasets/jmsgrea/enfoco-news/resolve/main/latest_news.json', {
           signal: controller.signal
         });
         clearTimeout(timeout);
